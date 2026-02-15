@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { warehouseService, Warehouse, WarehouseInput } from '../services/warehouseService';
-import { productService } from '../services/productService';
+import { productService, Product } from '../services/productService';
 import { inventoryService } from '../services/inventoryService';
 import { useTranslation } from 'react-i18next';
 import { useToast } from '../contexts/ToastContext';
@@ -10,6 +10,7 @@ const Warehouses: React.FC = () => {
   const { t } = useTranslation();
   const { addToast } = useToast();
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -21,15 +22,12 @@ const Warehouses: React.FC = () => {
     location: '',
     description: '',
   });
-  const [newProductData, setNewProductData] = useState({
-    name: '',
-    category: '',
-    sku: '',
-    price: 0,
-    description: '',
+  const [selectedProductId, setSelectedProductId] = useState('');
+  const [addProductData, setAddProductData] = useState({
     quantity: 0,
     minimumStock: 10,
   });
+  const [productFilter, setProductFilter] = useState<string>('');
 
   const loadWarehouses = async () => {
     try {
@@ -42,8 +40,18 @@ const Warehouses: React.FC = () => {
     }
   };
 
+  const loadProducts = async () => {
+    try {
+      const data = await productService.getAll();
+      setAllProducts(data);
+    } catch (error) {
+      // silent
+    }
+  };
+
   useEffect(() => {
     loadWarehouses();
+    loadProducts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -98,31 +106,23 @@ const Warehouses: React.FC = () => {
 
   const handleAddProductToWarehouse = (warehouseId: string) => {
     setShowAddProduct(warehouseId);
-    setNewProductData({
-      name: '', category: '', sku: '', price: 0, description: '',
-      quantity: 0, minimumStock: 10,
-    });
+    setSelectedProductId('');
+    setAddProductData({ quantity: 0, minimumStock: 10 });
+    setProductFilter('');
   };
 
   const handleSubmitProductToWarehouse = async (e: React.FormEvent) => {
     e.preventDefault();
     const warehouseId = showAddProduct;
-    if (!warehouseId) return;
+    if (!warehouseId || !selectedProductId) return;
     try {
-      const product = await productService.create({
-        name: newProductData.name,
-        category: newProductData.category,
-        sku: newProductData.sku,
-        price: newProductData.price,
-        description: newProductData.description,
-      });
       await inventoryService.create({
-        productId: product.id,
+        productId: selectedProductId,
         warehouseId,
-        quantity: newProductData.quantity,
-        minimumStock: newProductData.minimumStock,
+        quantity: addProductData.quantity,
+        minimumStock: addProductData.minimumStock,
       });
-      addToast('Product created & added to warehouse ✓');
+      addToast('Product added to warehouse ✓');
       setShowAddProduct(null);
       loadWarehouses();
     } catch (error: any) {
@@ -146,6 +146,21 @@ const Warehouses: React.FC = () => {
       w.name, w.location, w.description || '', String(w.products?.length || 0),
     ]));
     addToast('CSV exported ✓');
+  };
+
+  // Get products already in a warehouse
+  const getWarehouseProductIds = (warehouse: Warehouse): string[] => {
+    return (warehouse.products || []).map((p: any) => p.productId || p.id);
+  };
+
+  // Filter available products (not already in the warehouse)
+  const getAvailableProducts = (warehouse: Warehouse): Product[] => {
+    const existingIds = getWarehouseProductIds(warehouse);
+    let available = allProducts.filter(p => !existingIds.includes(p.id));
+    if (productFilter) {
+      available = available.filter(p => p.category === productFilter);
+    }
+    return available;
   };
 
   const filteredWarehouses = warehouses.filter(
@@ -289,48 +304,61 @@ const Warehouses: React.FC = () => {
                             className="btn-success btn-sm"
                             onClick={() => handleAddProductToWarehouse(warehouse.id)}
                           >
-                            + Add Product to Warehouse
+                            + {t('warehouses.addExistingProduct')}
                           </button>
                         </div>
 
                         {showAddProduct === warehouse.id && (
-                          <div style={{ background: 'var(--surface)', padding: '16px', borderRadius: 'var(--radius)', marginBottom: '16px', border: '2px dashed var(--border)' }}>
-                            <h4 style={{ marginBottom: '12px', color: 'var(--text)' }}>➕ {t('warehouses.addNewProduct')}</h4>
+                          <div style={{ background: 'var(--surface)', padding: '20px', borderRadius: 'var(--radius)', marginBottom: '16px', border: '2px dashed var(--border)' }}>
+                            <h4 style={{ marginBottom: '14px', color: 'var(--text)' }}>📦 {t('warehouses.selectExistingProduct')}</h4>
+
+                            {/* Category filter pills */}
+                            <div style={{ display: 'flex', gap: '8px', marginBottom: '14px', flexWrap: 'wrap' }}>
+                              <button type="button" className={`btn-sm ${!productFilter ? 'btn-primary' : 'btn-outline'}`} onClick={() => setProductFilter('')}>
+                                All
+                              </button>
+                              <button type="button" className={`btn-sm ${productFilter === 'Paints' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setProductFilter('Paints')} style={productFilter === 'Paints' ? { background: '#8b5cf6', borderColor: '#8b5cf6' } : {}}>
+                                🎨 {t('categories.Paints')}
+                              </button>
+                              <button type="button" className={`btn-sm ${productFilter === 'Iron' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setProductFilter('Iron')} style={productFilter === 'Iron' ? { background: '#64748b', borderColor: '#64748b' } : {}}>
+                                🚪 {t('categories.Iron')}
+                              </button>
+                            </div>
+
                             <form onSubmit={handleSubmitProductToWarehouse}>
-                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '12px' }}>
+                              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '12px', marginBottom: '12px' }}>
                                 <div className="form-group" style={{ marginBottom: 0 }}>
-                                  <label>{t('products.name')} *</label>
-                                  <input type="text" value={newProductData.name} onChange={(e) => setNewProductData({...newProductData, name: e.target.value})} placeholder="Product name" required />
-                                </div>
-                                <div className="form-group" style={{ marginBottom: 0 }}>
-                                  <label>{t('products.category')} *</label>
-                                  <input type="text" value={newProductData.category} onChange={(e) => setNewProductData({...newProductData, category: e.target.value})} placeholder="e.g. Electronics" required />
-                                </div>
-                                <div className="form-group" style={{ marginBottom: 0 }}>
-                                  <label>{t('products.sku')} *</label>
-                                  <input type="text" value={newProductData.sku} onChange={(e) => setNewProductData({...newProductData, sku: e.target.value})} placeholder="e.g. SKU-001" required />
-                                </div>
-                              </div>
-                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '12px', marginBottom: '12px' }}>
-                                <div className="form-group" style={{ marginBottom: 0 }}>
-                                  <label>{t('products.price')} *</label>
-                                  <input type="number" step="0.01" value={newProductData.price} onChange={(e) => setNewProductData({...newProductData, price: parseFloat(e.target.value)})} required min="0" />
+                                  <label>{t('inventory.product')} *</label>
+                                  <select
+                                    value={selectedProductId}
+                                    onChange={(e) => setSelectedProductId(e.target.value)}
+                                    required
+                                    style={{ width: '100%', padding: '10px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--text)' }}
+                                  >
+                                    <option value="">{t('inventory.selectProduct')}</option>
+                                    {getAvailableProducts(warehouse).map((product) => (
+                                      <option key={product.id} value={product.id}>
+                                        {product.category === 'Paints' ? '🎨' : '🚪'} {product.name} (${product.price.toFixed(2)}, {product.unitsPerProduct || 1} units)
+                                      </option>
+                                    ))}
+                                  </select>
+                                  {getAvailableProducts(warehouse).length === 0 && (
+                                    <small style={{ color: 'var(--warning)', marginTop: '4px', display: 'block' }}>
+                                      No available products. Create products on the Products page first.
+                                    </small>
+                                  )}
                                 </div>
                                 <div className="form-group" style={{ marginBottom: 0 }}>
                                   <label>{t('inventory.quantity')} *</label>
-                                  <input type="number" value={newProductData.quantity} onChange={(e) => setNewProductData({...newProductData, quantity: parseInt(e.target.value)})} required min="0" />
+                                  <input type="number" value={addProductData.quantity} onChange={(e) => setAddProductData({...addProductData, quantity: parseInt(e.target.value)})} required min="0" />
                                 </div>
                                 <div className="form-group" style={{ marginBottom: 0 }}>
                                   <label>{t('inventory.minimumStock')}</label>
-                                  <input type="number" value={newProductData.minimumStock} onChange={(e) => setNewProductData({...newProductData, minimumStock: parseInt(e.target.value)})} min="0" />
-                                </div>
-                                <div className="form-group" style={{ marginBottom: 0 }}>
-                                  <label>{t('products.description')}</label>
-                                  <input type="text" value={newProductData.description} onChange={(e) => setNewProductData({...newProductData, description: e.target.value})} placeholder="Optional" />
+                                  <input type="number" value={addProductData.minimumStock} onChange={(e) => setAddProductData({...addProductData, minimumStock: parseInt(e.target.value)})} min="0" />
                                 </div>
                               </div>
                               <div style={{ display: 'flex', gap: '8px' }}>
-                                <button type="submit" className="btn-success btn-sm">✓ {t('warehouses.create')}</button>
+                                <button type="submit" className="btn-success btn-sm" disabled={!selectedProductId}>✓ {t('warehouses.create')}</button>
                                 <button type="button" className="btn-outline btn-sm" onClick={() => setShowAddProduct(null)}>{t('warehouses.cancel')}</button>
                               </div>
                             </form>
@@ -345,7 +373,7 @@ const Warehouses: React.FC = () => {
                                 <tr>
                                   <th>{t('products.name')}</th>
                                   <th>{t('products.category')}</th>
-                                  <th>{t('warehouses.sku')}</th>
+                                  <th>{t('products.unitsPerProduct')}</th>
                                   <th>{t('warehouses.quantity')}</th>
                                   <th>{t('warehouses.price')}</th>
                                   <th>{t('warehouses.actions')}</th>
@@ -355,8 +383,12 @@ const Warehouses: React.FC = () => {
                                 {warehouse.products.map((product) => (
                                   <tr key={product.id}>
                                     <td><strong>{product.name}</strong></td>
-                                    <td><span className="badge badge-info">{product.category}</span></td>
-                                    <td><code style={{ background: 'var(--bg)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.82rem' }}>{product.sku}</code></td>
+                                    <td>
+                                      <span className="badge" style={{ background: product.category === 'Paints' ? '#8b5cf6' : product.category === 'Iron' ? '#64748b' : 'var(--info)', color: '#fff' }}>
+                                        {product.category === 'Paints' ? '🎨' : product.category === 'Iron' ? '🚪' : '📦'} {t(`categories.${product.category}`)}
+                                      </span>
+                                    </td>
+                                    <td><span className="badge badge-neutral">{(product as any).unitsPerProduct || 1} units</span></td>
                                     <td><strong>{product.quantity}</strong></td>
                                     <td><strong>${product.price.toFixed(2)}</strong></td>
                                     <td>

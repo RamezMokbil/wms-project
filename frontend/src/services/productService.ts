@@ -6,6 +6,7 @@ export interface Product {
   category: string;
   sku: string;
   price: number;
+  unitsPerProduct: number;
   description?: string;
   createdAt: string;
   updatedAt: string;
@@ -14,8 +15,9 @@ export interface Product {
 export interface ProductInput {
   name: string;
   category: string;
-  sku: string;
+  sku?: string;
   price: number;
+  unitsPerProduct: number;
   description?: string;
 }
 
