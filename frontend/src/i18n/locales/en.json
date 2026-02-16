@@ -172,5 +172,15 @@
     "currentPassword": "Current Password",
     "newPassword": "New Password",
     "confirmPassword": "Confirm Password"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "noNotifications": "No notifications yet",
+    "markAllRead": "Mark all read",
+    "delete": "Delete",
+    "justNow": "Just now",
+    "minsAgo": "m ago",
+    "hoursAgo": "h ago",
+    "daysAgo": "d ago"
   }
 }

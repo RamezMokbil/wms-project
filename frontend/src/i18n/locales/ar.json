@@ -172,5 +172,15 @@
     "currentPassword": "كلمة المرور الحالية",
     "newPassword": "كلمة المرور الجديدة",
     "confirmPassword": "تأكيد كلمة المرور"
+  },
+  "notifications": {
+    "title": "الإشعارات",
+    "noNotifications": "لا توجد إشعارات بعد",
+    "markAllRead": "تحديد الكل كمقروء",
+    "delete": "حذف",
+    "justNow": "الآن",
+    "minsAgo": "د مضت",
+    "hoursAgo": "س مضت",
+    "daysAgo": "ي مضت"
   }
 }
